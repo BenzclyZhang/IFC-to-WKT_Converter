@@ -1,0 +1,2 @@
+# IFC-to-WKT_Converter
+This converter converts IFC STEP files to RDF files, with each IfcProduct instance which has 3D physical shape being associated with a Well Known Text to represent its geometry data. It only supports three representations: 3D meshes (using "TIN Z..."), Axis Aligned Bounding Box (using "POLYHEDRALSURFACE Z..."), and Minimum Volumn Bounding Box (using "POLYHEDRALSURFACE Z...").
