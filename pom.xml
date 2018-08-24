@@ -1,0 +1,100 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<groupId>nl.tue.ddss</groupId>
+	<artifactId>IfcSTEP2WKT</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+
+	<name>IfcSTEP2WKT Maven Plugin</name>
+
+	<properties>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<maven.compiler.source>1.8</maven.compiler.source>
+		<maven.compiler.target>1.8</maven.compiler.target>
+	</properties>
+
+	<build>
+		<plugins>
+			<!-- any other plugins -->
+			<plugin>
+				<artifactId>maven-assembly-plugin</artifactId>
+				<executions>
+					<execution>
+						<phase>package</phase>
+						<goals>
+							<goal>single</goal>
+						</goals>
+					</execution>
+				</executions>
+				<configuration>
+					<descriptorRefs>
+						<descriptorRef>jar-with-dependencies</descriptorRef>
+					</descriptorRefs>
+					        <archive>
+          <manifest>
+            <addClasspath>true</addClasspath>
+            <classpathPrefix>lib/</classpathPrefix>
+            <mainClass>nl.tue.ddss.convert.Ifc2WktConverter</mainClass>
+          </manifest>
+        </archive>
+				</configuration>
+
+			</plugin>
+			
+			<plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-resources-plugin</artifactId>
+    <version>3.0.2</version>
+    <executions>
+      <execution>
+        <id>copy-renderengine</id>
+        <phase>process-resources</phase>
+        <goals>
+          <goal>copy-resources</goal>
+        </goals>
+        <configuration>
+          <overwrite>true</overwrite>
+          <outputDirectory>${project.build.directory}/${project.artifactId}-${project.version}/exe</outputDirectory>
+          <resources>
+            <resource>
+              <directory>${basedir}/src/main/resources/exe</directory>
+            </resource>
+          </resources>
+        </configuration>
+      </execution>
+    </executions>
+  </plugin>
+
+		</plugins>
+	</build>
+	
+	
+	
+
+	<dependencies>
+		<!-- https://mvnrepository.com/artifact/java3d/j3d-core-utils -->
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<version>3.8.1</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.jena</groupId>
+			<artifactId>jena-tdb</artifactId>
+			<version>1.0.0</version>
+		</dependency>
+		<dependency>
+			<groupId>org.opensourcebim</groupId>
+			<artifactId>bimserverclientlib</artifactId>
+			<version>1.5.63</version>
+		</dependency>
+		<dependency>
+			<groupId>javax.vecmath</groupId>
+			<artifactId>vecmath</artifactId>
+			<version>1.5.2</version>
+		</dependency>
+	</dependencies>
+
+</project>
