@@ -31,9 +31,9 @@ import org.ifcopenshell.IfcOpenShellEngine;
 import org.ifcopenshell.IfcOpenShellEntityInstance;
 import org.ifcopenshell.IfcOpenShellModel;
 
-import com.hp.hpl.jena.graph.Node;
-import com.hp.hpl.jena.rdf.model.Model;
-import com.hp.hpl.jena.rdf.model.ModelFactory;
+import org.apache.jena.graph.Node;
+import org.apache.jena.rdf.model.Model;
+import org.apache.jena.rdf.model.ModelFactory;
 
 import nl.tue.ddss.bimsparql.function.geom.GEOM;
 

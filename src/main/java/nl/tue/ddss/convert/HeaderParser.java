@@ -23,11 +23,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Stack;
-
-import org.openbimstandards.vo.IFCVO;
 
 
 /**
@@ -285,5 +285,58 @@ public class HeaderParser {
         }
         return ifcvo;
     }
+	
+	public class IFCVO {
+
+	    private Long lineNum;
+	    private String fullLineAfterNum;
+	    private String name = null;
+	    private LinkedList<Object> list = new LinkedList<>();
+	    private Map<String, LinkedList<IFCVO>> inversePointerSets = new HashMap<>();
+
+	    public IFCVO() {
+	        //default constructor
+	    }
+
+	    public String getFullLineAfterNum() {
+	        return fullLineAfterNum;
+	    }
+
+	    public void setFullLineAfterNum(String fullLineAfterNum) {
+	        this.fullLineAfterNum = fullLineAfterNum;
+	    }
+
+	    public Long getLineNum() {
+	        return lineNum;
+	    }
+
+	    public void setLineNum(Long lineNum) {
+	        this.lineNum = lineNum;
+	    }
+
+	    public String getName() {
+	        return name;
+	    }
+
+	    public void setName(String name) {
+	        this.name = name;
+	    }
+
+	    public List<Object> getObjectList() {
+	        return list;
+	    }
+
+	    public void setList(List<Object> list) {
+	        this.list = (LinkedList<Object>) list;
+	    }
+
+	    public Map<String, LinkedList<IFCVO>> getInversePointerSets() {
+	        return inversePointerSets;
+	    }
+
+	    public void setInversePointerSets(Map<String, LinkedList<IFCVO>> inversePointerSets) {
+	        this.inversePointerSets = inversePointerSets;
+	    }
+	}
 
 }

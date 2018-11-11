@@ -16,21 +16,26 @@
  ******************************************************************************/
 package nl.tue.ddss.bimsparql.geometry.convert;
 
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.text.SimpleDateFormat;
-import java.util.Calendar;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
-import com.hp.hpl.jena.graph.NodeFactory;
-import com.hp.hpl.jena.graph.Triple;
+import org.apache.jena.graph.NodeFactory;
+import org.apache.jena.graph.Triple;
 import org.apache.jena.riot.system.StreamRDF;
 import org.apache.jena.riot.writer.WriterStreamRDFBlocks;
 
@@ -42,7 +47,7 @@ import org.ifcopenshell.IfcOpenShellEngine;
 import org.ifcopenshell.IfcOpenShellEntityInstance;
 import org.ifcopenshell.IfcOpenShellModel;
 
-import com.hp.hpl.jena.graph.Node;
+import org.apache.jena.graph.Node;
 
 import fi.ni.rdf.Namespace;
 import nl.tue.ddss.bimsparql.function.geom.GEOM;
@@ -53,69 +58,25 @@ import nl.tue.ddss.bimsparql.geometry.Triangle;
 import nl.tue.ddss.bimsparql.geometry.TriangulatedSurface;
 import nl.tue.ddss.bimsparql.geometry.ewkt.EwktWriter;
 import nl.tue.ddss.bimsparql.geometry.ewkt.WktWriteException;
-import nl.tue.ddss.convert.Header;
-import nl.tue.ddss.convert.HeaderParser;
 import nl.tue.ddss.convert.IfcVersion;
-import nl.tue.ddss.convert.IfcVersionException;
-import nl.tue.ddss.convert.ResourceManager;
-
 
 public class GeometryConverter {
-	
+
 	StreamRDF rdfWriter;
 	String baseUri;
 	int i;
-	private String timeLog = new SimpleDateFormat("yyyyMMdd_HHmmss").format(Calendar.getInstance().getTime());
-	public final String DEFAULT_PATH = "http://linkedbuildingdata.net/ifc/resources" + timeLog + "/";
-	
-	public GeometryConverter(String baseUri){
-		this.baseUri=baseUri;
+
+	InstanceGeometry instanceGeometry;
+
+	public GeometryConverter(String baseUri) {
+		this.baseUri = baseUri;
+		instanceGeometry = new InstanceGeometry();
 	}
-	
-	public void convertGeometry(String in, String out, String ifcVersion,boolean boundingbox){
-		try {
-			InputStream	input = new FileInputStream(in);
 
-			OutputStream output = new FileOutputStream(out);
-
+	public void parseModel2GeometryStream(InputStream in, OutputStream out, IfcVersion ifcVersion, boolean boundingbox)
+			throws IOException, WktWriteException {
 		IfcVersion.initDefaultIfcNsMap();
-		IfcVersion version=null;
-	Header header = HeaderParser.parseHeader(input);
-	if(ifcVersion!=null){
-		version=IfcVersion.getIfcVersion(ifcVersion);
-	}else{
-			version=IfcVersion.getIfcVersion(header);
-	}
-	convertGeometry(input,output,version,boundingbox);
-		} catch (FileNotFoundException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (IfcVersionException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-
-	}
-
-	public void convertGeometry(InputStream in,OutputStream out, IfcVersion ifcVersion,boolean boundingbox) {
-		try {
-			parseModel2GeometryStream(in,out,ifcVersion,boundingbox);
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (WktWriteException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-	}
-	
-	public void parseModel2GeometryStream(InputStream in,OutputStream out, IfcVersion ifcVersion,boolean boundingbox)
-			throws IOException, WktWriteException{
-		IfcVersion.initDefaultIfcNsMap();
-       String ontNs= IfcVersion.IfcNSMap.get(ifcVersion);
+		String ontNs = IfcVersion.IfcNSMap.get(ifcVersion);
 		setRdfWriter(new WriterStreamRDFBlocks(out));
 		getRdfWriter().base(baseUri);
 		getRdfWriter().prefix("ifcowl", ontNs);
@@ -125,17 +86,17 @@ public class GeometryConverter {
 		getRdfWriter().prefix("owl", Namespace.OWL);
 		getRdfWriter().prefix("geom", GEOM.getURI());
 		getRdfWriter().start();
-		i=0;
-		generateGeometry(in,boundingbox);
-		System.out.println("Model parsed!");	
+		i = 0;
+		generateGeometry(in, boundingbox);
+		System.out.println("Model parsed!");
 		System.out.println("Finished!");
 		getRdfWriter().finish();
 	}
-	
-	public void parseModel2MaterialStream(InputStream in,OutputStream out, IfcVersion ifcVersion)
-			throws IOException, WktWriteException{
+
+	public void parseModel2MaterialStream(InputStream in, OutputStream out, IfcVersion ifcVersion)
+			throws IOException, WktWriteException {
 		IfcVersion.initDefaultIfcNsMap();
-       String ontNs= IfcVersion.IfcNSMap.get(ifcVersion);
+		String ontNs = IfcVersion.IfcNSMap.get(ifcVersion);
 		setRdfWriter(new WriterStreamRDFBlocks(out));
 		getRdfWriter().base(baseUri);
 		getRdfWriter().prefix("ifcowl", ontNs);
@@ -145,209 +106,272 @@ public class GeometryConverter {
 		getRdfWriter().prefix("owl", Namespace.OWL);
 		getRdfWriter().prefix("geom", GEOM.getURI());
 		getRdfWriter().start();
-		i=0;
+		i = 0;
 		generateMaterials(in);
-		System.out.println("Model parsed!");	
+		System.out.println("Model parsed!");
 		System.out.println("Finished!");
 		getRdfWriter().finish();
 	}
 
-		public StreamRDF getRdfWriter() {
+	public StreamRDF getRdfWriter() {
 		return rdfWriter;
 	}
-
 
 	public void setRdfWriter(StreamRDF rdfWriter) {
 		this.rdfWriter = rdfWriter;
 	}
 
+	public void generateGeometry(InputStream in, boolean boundingbox) throws WktWriteException {
+		IfcOpenShellEngine ifcOpenShellEngine;
+		try {
+			Path path = Paths.get(GeometryConverter.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+			String enginePath=path.toString() + getEngineForOS();
+			ifcOpenShellEngine = new IfcOpenShellEngine(enginePath);
 
-		public void generateGeometry(InputStream in,boolean boundingbox) throws WktWriteException {	
-			IfcOpenShellEngine ifcOpenShellEngine;
-			try {
-				String dir="D:/workspace/IfcSTEP2WKT/src/main/resources/exe/64/win/IfcGeomServer.exe";
-	//			String dir=ResourceManager.extract(getEngineForOS());
-	//			Path path = Paths.get(GeometryConverter.class.getProtectionDomain().getCodeSource().getLocation().toURI()); 
-	//			String parentPath=path.getParent().toString();
-				
-				ifcOpenShellEngine = new IfcOpenShellEngine(dir);
-	
 			RenderEngineModel renderEngineModel = ifcOpenShellEngine.openModel(in);
-					renderEngineModel.generateGeneralGeometry();
-					HashMap<Integer,IfcOpenShellEntityInstance> instancesById=((IfcOpenShellModel)renderEngineModel).getInstancesById();
-					for (Integer id:instancesById.keySet()){	
-						i++;
-								IfcOpenShellEntityInstance renderEngineInstance=instancesById.get(id);
-								RenderEngineGeometry geometry=renderEngineInstance.generateGeometry();
-								InstanceGeometry instanceGeometry=new InstanceGeometry();
-								if (geometry != null && geometry.getNrIndices() > 0) {
-                                    instanceGeometry.setId(id);
-									instanceGeometry.setPointers(geometry.getIndices());
-									instanceGeometry.setType(renderEngineInstance.getType());
-									instanceGeometry.setColors(geometry.getMaterials());
-									instanceGeometry.setMaterialIndices(geometry.getMaterialIndices());
-									
-									double[] tranformationMatrix = new double[16];
-									Matrix.setIdentityM(tranformationMatrix, 0);
-									if (renderEngineInstance.getTransformationMatrix() != null) {
-										tranformationMatrix = renderEngineInstance.getTransformationMatrix();
-									}
-                                    double[] points=new double[geometry.getVertices().length];
-									for (int i = 0; i < instanceGeometry.getPointers().length; i++) {
-										processExtends(tranformationMatrix, geometry.getVertices(), instanceGeometry.getPointers()[i] * 3,points);
-									}
-									instanceGeometry.setPoints(points);
-								}
-								if(i%500==0){
-									System.out.println("");
-								}
-								addGeometryTriples(instanceGeometry,boundingbox);
-					}
-			} catch (IOException e1) {
-				// TODO Auto-generated catch block
-				e1.printStackTrace();
-			} catch (RenderEngineException e1) {
-				// TODO Auto-generated catch block
-				e1.printStackTrace();
-			} 
-		}
-		
-		private String getEngineForOS() throws RenderEngineException{
-			String os=System.getProperty("os.name").toLowerCase();
-			String arch=System.getProperty("os.arch");
-			String result="/exe";
-			if(arch.contains("64")){
-				result=result+"/64";
-				if(os.indexOf("win") >= 0){
-					return result+"/win/IfcGeomServer.exe";
-				}else if(os.indexOf("nix") >= 0 || os.indexOf("nux") >= 0 || os.indexOf("aix") > 0 ){
-					return result+"/linux/IfcGeomServer";
-				}else if(os.indexOf("mac") >= 0){
-					return result+"/osx/IfcGeomServer";
+			renderEngineModel.generateGeneralGeometry();
+			HashMap<Integer, IfcOpenShellEntityInstance> instancesById = ((IfcOpenShellModel) renderEngineModel)
+					.getInstancesById();
+			Iterator<Entry<Integer, IfcOpenShellEntityInstance>> it = instancesById.entrySet().iterator();
+			while (it.hasNext()) {
+				i++;
+				Map.Entry<Integer, IfcOpenShellEntityInstance> pair = it.next();
+
+				InstanceGeometry ig = new InstanceGeometry();
+				IfcOpenShellEntityInstance renderEngineInstance = pair.getValue();
+
+				ExecutorService executor = Executors.newSingleThreadExecutor();
+				Future<String> future = executor
+						.submit(new GeometryTask(pair.getKey().toString(), renderEngineInstance));
+
+				try {
+					System.out.println(future.get(1, TimeUnit.SECONDS));
+				} catch (TimeoutException e) {
+					future.cancel(true);
+					System.out.println(pair.getKey() + " " + renderEngineInstance.getType() + " Terminated!");
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				} catch (ExecutionException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
 				}
-			}else if(arch.contains("32")){
-				result=result+"/32";
-				if(os.indexOf("win") >= 0){
-					return result+"/win/IfcGeomServer.exe";
-				}else if(os.indexOf("nix") >= 0 || os.indexOf("nux") >= 0 || os.indexOf("aix") > 0 ){
-					return result+"/linux/IfcGeomServer";
+				executor.shutdownNow();
+				try {
+					executor.awaitTermination(1, TimeUnit.SECONDS);
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+
+				System.out.println(i);
+				ig = instanceGeometry;
+				instanceGeometry = null;
+				if (ig != null) {
+				addGeometryTriples(ig,boundingbox);
 				}
 			}
-			throw new RenderEngineException("not supported operation system : "+os+" "+arch);
-
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		} catch (RenderEngineException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		} catch (URISyntaxException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
 		}
-		
-		public void generateMaterials(InputStream in) throws WktWriteException{	
-			IfcOpenShellEngine ifcOpenShellEngine;
-			try {
-				Path path = Paths.get(GeometryConverter.class.getProtectionDomain().getCodeSource().getLocation().toURI()); 
-				Path parent = path.getParent();
-				String parentDirName = parent.toString();
-				ifcOpenShellEngine = new IfcOpenShellEngine(parentDirName+getEngineForOS());
+	}
+
+	private void transformGeometry(String id, IfcOpenShellEntityInstance renderEngineInstance)
+			throws WktWriteException {
+
+			RenderEngineGeometry geometry = renderEngineInstance.generateGeometry();
+			if (geometry != null && geometry.getNrIndices() > 0) {
+				instanceGeometry = new InstanceGeometry();
+				instanceGeometry.setPointers(geometry.getIndices());
+				instanceGeometry.setType(renderEngineInstance.getType());
+				instanceGeometry.setColors(geometry.getMaterials());
+				instanceGeometry.setMaterialIndices(geometry.getMaterialIndices());
+
+				double[] tranformationMatrix = new double[16];
+				Matrix.setIdentityM(tranformationMatrix, 0);
+				if (renderEngineInstance.getTransformationMatrix() != null) {
+					tranformationMatrix = renderEngineInstance.getTransformationMatrix();
+				}
+				double[] points = new double[geometry.getVertices().length];
+				for (int i = 0; i < instanceGeometry.getPointers().length; i++) {
+					processExtends(tranformationMatrix, geometry.getVertices(), instanceGeometry.getPointers()[i] * 3,
+							points);
+				}
+				instanceGeometry.setPoints(points);
+			}
+	}
 	
+	private void transformMaterial(String id, IfcOpenShellEntityInstance renderEngineInstance) {
+		RenderEngineGeometry geometry = renderEngineInstance.generateGeometry();
+        
+		if (geometry != null && geometry.getNrIndices() > 0) {
+			instanceGeometry = new InstanceGeometry();
+			instanceGeometry.setType(renderEngineInstance.getType());
+			instanceGeometry.setColors(geometry.getMaterials());
+			instanceGeometry.setMaterialIndices(geometry.getMaterialIndices());
+		}
+
+	}
+
+	private String getEngineForOS() throws RenderEngineException {
+		String os = System.getProperty("os.name").toLowerCase();
+		String arch = System.getProperty("os.arch");
+		String result = "/exe";
+		if (arch.contains("64")) {
+			result = result + "/64";
+			if (os.indexOf("win") >= 0) {
+				return result + "/win/IfcGeomServer.exe";
+			} else if (os.indexOf("nix") >= 0 || os.indexOf("nux") >= 0 || os.indexOf("aix") > 0) {
+				return result + "/linux/IfcGeomServer";
+			} else if (os.indexOf("mac") >= 0) {
+				return result + "/osx/IfcGeomServer";
+			}
+		} else if (arch.contains("32")) {
+			result = result + "/32";
+			if (os.indexOf("win") >= 0) {
+				return result + "/win/IfcGeomServer.exe";
+			} else if (os.indexOf("nix") >= 0 || os.indexOf("nux") >= 0 || os.indexOf("aix") > 0) {
+				return result + "/linux/IfcGeomServer";
+			}
+		}
+		throw new RenderEngineException("not supported operation system : " + os + " " + arch);
+
+	}
+
+	public void generateMaterials(InputStream in) throws WktWriteException {
+		IfcOpenShellEngine ifcOpenShellEngine;
+		try {
+			Path path = Paths.get(GeometryConverter.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+			Path parent = path.getParent();
+			String parentDirName = parent.toString();
+			ifcOpenShellEngine = new IfcOpenShellEngine(parentDirName + getEngineForOS());
+
 			RenderEngineModel renderEngineModel = ifcOpenShellEngine.openModel(in);
-					renderEngineModel.generateGeneralGeometry();
-					HashMap<Integer,IfcOpenShellEntityInstance> instancesById=((IfcOpenShellModel)renderEngineModel).getInstancesById();
-					for (Integer id:instancesById.keySet()){	
-						i++;
-								IfcOpenShellEntityInstance renderEngineInstance=instancesById.get(id);
-								RenderEngineGeometry geometry=renderEngineInstance.generateGeometry();
-								InstanceGeometry instanceGeometry=new InstanceGeometry();
-								if (geometry != null && geometry.getNrIndices() > 0) {
-                                    instanceGeometry.setId(id);
-									instanceGeometry.setType(renderEngineInstance.getType());
-									instanceGeometry.setColors(geometry.getMaterials());
-									instanceGeometry.setMaterialIndices(geometry.getMaterialIndices());
-								}
-								if(i%500==0){
-									System.out.println("");
-								}
-								addMaterialTriples(instanceGeometry);
-					}
-			} catch (IOException e1) {
-				// TODO Auto-generated catch block
-				e1.printStackTrace();
-			} catch (RenderEngineException e1) {
-				// TODO Auto-generated catch block
-				e1.printStackTrace();
-			} catch (URISyntaxException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			} 
+			renderEngineModel.generateGeneralGeometry();
+			HashMap<Integer, IfcOpenShellEntityInstance> instancesById = ((IfcOpenShellModel) renderEngineModel)
+					.getInstancesById();
+			for (Integer id : instancesById.keySet()) {
+				i++;
+				InstanceGeometry ig = new InstanceGeometry();
+
+				IfcOpenShellEntityInstance renderEngineInstance = instancesById.get(id);
+				
+				ExecutorService executor = Executors.newSingleThreadExecutor();
+				Future<String> future = executor
+						.submit(new MaterialTask(id.toString(), renderEngineInstance));
+
+				try {
+					System.out.println(future.get(1, TimeUnit.SECONDS));
+				} catch (TimeoutException e) {
+					future.cancel(true);
+					System.out.println(id + " " + renderEngineInstance.getType() + " Terminated!");
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				} catch (ExecutionException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				executor.shutdownNow();
+				try {
+					executor.awaitTermination(1, TimeUnit.SECONDS);
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+
+				System.out.println(i);
+				ig = instanceGeometry;
+				instanceGeometry = null;
+				if (ig != null) {
+				addMaterialTriples(ig);
+				}
+			}
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		} catch (RenderEngineException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		} catch (URISyntaxException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
 		}
-		
-    public void addMaterialTriples(InstanceGeometry ig){
-    	if(ig.getColors()!=null&&ig.getColors().length>0){
-        String materials=""+ig.getColors()[0];
-        for(int i=1;i<ig.getColors().length;i++){
-        	materials=materials+" "+ig.getColors()[i];
-        }
-        
-        String indices=""+ig.getMaterialIndices()[0];
-        for(int i=1;i<ig.getMaterialIndices().length;i++){
-        	indices=indices+" "+ig.getMaterialIndices()[i];
-        }
-        
-        Node hasMaterials=NodeFactory.createURI(GEOM.getURI()+"hasMaterials");
-        Node hasMaterialIndices=NodeFactory.createURI(GEOM.getURI()+"hasMaterialIndices");
-    	getRdfWriter().triple(new Triple(NodeFactory.createURI(baseUri+"Geometry"+"_"+ig.getId()),hasMaterials,NodeFactory.createLiteral(materials)));
-    	getRdfWriter().triple(new Triple(NodeFactory.createURI(baseUri+"Geometry"+"_"+ig.getId()),hasMaterialIndices,NodeFactory.createLiteral((indices))));
-    	}
-       
-    }
-    
-    public void processBoundingBoxes(){
-    	
-    }
-    
-	public void addGeometryTriples(InstanceGeometry ig,boolean boundingbox) throws WktWriteException{
-		Geometry g=toGeometry(ig);
+	}
 
-    	String s=toWKT(g);
-    	getRdfWriter().triple(new Triple(NodeFactory.createURI(baseUri+ig.getType()+"_"+ig.getId()),GEOM.hasGeometry.asNode(),NodeFactory.createURI(baseUri+"Geometry"+"_"+ig.getId())));
-    	getRdfWriter().triple(new Triple(NodeFactory.createURI(baseUri+"Geometry"+"_"+ig.getId()),GEOM.asBody.asNode(),NodeFactory.createLiteral((s))));
- /*   	if((!g.isEmpty())&&boundingbox){
-    		Box aabb=toAABB(g);
-    		mvbb=toMVBB(g);
-    		if(aabb.getVolume()<mvbb.getVolume()){
-    			System.out.println("Error: AABB: "+ aabb.getVolume()+" | MVBB: "+mvbb.getVolume());
-    		}
-    		getRdfWriter().triple(new Triple(NodeFactory.createURI(baseUri+"Geometry"+"_"+ig.getId()),GEOM.asAABB.asNode(),NodeFactory.createLiteral((toWKT(aabb.toPolyhedralSurface())))));
-    		getRdfWriter().triple(new Triple(NodeFactory.createURI(baseUri+"Geometry"+"_"+ig.getId()),GEOM.asMVBB.asNode(),NodeFactory.createLiteral((toWKT(mvbb.toPolyhedralSurface())))));
-    	}*/
-	} 
-	
-	  public Geometry toGeometry(InstanceGeometry ig){
-	    	TriangulatedSurface geometry=new TriangulatedSurface();
-	    	double[] points=ig.getPoints();
-	    	int[] indices=ig.getPointers();
-	    	if(points!=null&&indices!=null){
-	    	for (int i = 0; i < indices.length; i = i + 3){
-	    		double d1=points[indices[i]*3];
-	    		double d2=points[indices[i]*3+1];
-	    		double d3=points[indices[i]*3+2];
-	    		double d4=points[indices[i+1]*3];
-	    		double d5=points[indices[i+1]*3+1];
-	    		double d6=points[indices[i+1]*3+2];
-	    		double d7=points[indices[i+2]*3];
-	    		double d8=points[indices[i+2]*3+1];
-	    		double d9=points[indices[i+2]*3+2];
-	    		Triangle t=new Triangle(new Point3d(d1,d2,d3),new Point3d(d4,d5,d6),new Point3d(d7,d8,d9));
-	           geometry.addTriangle(t);  		
-	    	}
-	    	}
-	    	return geometry;
-	    }
-    
-    
-	public String toWKT(Geometry g) throws WktWriteException{
-    EwktWriter ew=new EwktWriter("");
-    ew.writeRec(g);
-    return ew.getString();
-    }
+	public void addMaterialTriples(InstanceGeometry ig) {
+		if (ig.getColors() != null && ig.getColors().length > 0) {
+			String materials = "" + ig.getColors()[0];
+			for (int i = 1; i < ig.getColors().length; i++) {
+				materials = materials + " " + ig.getColors()[i];
+			}
 
-	
-	private void processExtends(double[] transformationMatrix, float[] ds, int index,double[] output) {
+			String indices = "" + ig.getMaterialIndices()[0];
+			for (int i = 1; i < ig.getMaterialIndices().length; i++) {
+				indices = indices + " " + ig.getMaterialIndices()[i];
+			}
+
+			Node hasMaterials = NodeFactory.createURI(GEOM.getURI() + "hasMaterials");
+			Node hasMaterialIndices = NodeFactory.createURI(GEOM.getURI() + "hasMaterialIndices");
+			getRdfWriter().triple(new Triple(NodeFactory.createURI(baseUri + "Geometry" + "_" + ig.getId()),
+					hasMaterials, NodeFactory.createLiteral(materials)));
+			getRdfWriter().triple(new Triple(NodeFactory.createURI(baseUri + "Geometry" + "_" + ig.getId()),
+					hasMaterialIndices, NodeFactory.createLiteral((indices))));
+		}
+
+	}
+
+	public void processBoundingBoxes() {
+
+	}
+
+	public void addGeometryTriples(InstanceGeometry ig, boolean boundingbox) throws WktWriteException {
+		Geometry g = toGeometry(ig);
+
+		String s = toWKT(g);
+		getRdfWriter().triple(new Triple(NodeFactory.createURI(baseUri + ig.getType() + "_" + ig.getId()),
+				GEOM.hasGeometry.asNode(), NodeFactory.createURI(baseUri + "Geometry" + "_" + ig.getId())));
+		getRdfWriter().triple(new Triple(NodeFactory.createURI(baseUri + "Geometry" + "_" + ig.getId()),
+				GEOM.asBody.asNode(), NodeFactory.createLiteral((s))));
+	}
+
+	public Geometry toGeometry(InstanceGeometry ig) {
+		TriangulatedSurface geometry = new TriangulatedSurface();
+		double[] points = ig.getPoints();
+		int[] indices = ig.getPointers();
+		if (points != null && indices != null) {
+			for (int i = 0; i < indices.length; i = i + 3) {
+				double d1 = points[indices[i] * 3];
+				double d2 = points[indices[i] * 3 + 1];
+				double d3 = points[indices[i] * 3 + 2];
+				double d4 = points[indices[i + 1] * 3];
+				double d5 = points[indices[i + 1] * 3 + 1];
+				double d6 = points[indices[i + 1] * 3 + 2];
+				double d7 = points[indices[i + 2] * 3];
+				double d8 = points[indices[i + 2] * 3 + 1];
+				double d9 = points[indices[i + 2] * 3 + 2];
+				Triangle t = new Triangle(new Point3d(d1, d2, d3), new Point3d(d4, d5, d6), new Point3d(d7, d8, d9));
+				geometry.addTriangle(t);
+			}
+		}
+		return geometry;
+	}
+
+	public String toWKT(Geometry g) throws WktWriteException {
+		EwktWriter ew = new EwktWriter("");
+		ew.writeRec(g);
+		return ew.getString();
+	}
+
+
+	private void processExtends(double[] transformationMatrix, float[] ds, int index, double[] output) {
 		double x = ds[index];
 		double y = ds[index + 1];
 		double z = ds[index + 2];
@@ -356,7 +380,39 @@ public class GeometryConverter {
 		Matrix.multiplyMV(result, 0, transformationMatrix, 0, new double[] { x, y, z, 1 }, 0);
 		output[index] = result[0];
 		output[index + 1] = result[1];
-		output[index + 2] = result[2];		
+		output[index + 2] = result[2];
+	}
+
+	class GeometryTask implements Callable<String> {
+		String id;
+		IfcOpenShellEntityInstance r;
+
+		public GeometryTask(String id, IfcOpenShellEntityInstance r) {
+			this.id = id;
+			this.r = r;
+		}
+
+		@Override
+		public String call() throws Exception {
+			transformGeometry(id, r);
+			return "Ready!";
+		}
+	}
+	
+	class MaterialTask implements Callable<String> {
+		String id;
+		IfcOpenShellEntityInstance r;
+
+		public MaterialTask(String id, IfcOpenShellEntityInstance r) {
+			this.id = id;
+			this.r = r;
+		}
+
+		@Override
+		public String call() throws Exception {
+			transformMaterial(id, r);
+			return "Ready!";
+		}
 	}
 
 }
